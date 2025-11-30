@@ -1,0 +1,20 @@
+# Docker volumes
+volumes/
+
+# Environment files
+.env
+.env.local
+
+# Grafana data
+grafana_data/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

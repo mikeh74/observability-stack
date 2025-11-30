@@ -186,15 +186,17 @@ scrape_configs:
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
     relabel_configs:
-      - source_labels: ['__meta_docker_container_label_com_docker_swarm_service_name']
+      - source_labels:
+          ["__meta_docker_container_label_com_docker_swarm_service_name"]
         target_label: service
-      - source_labels: ['__meta_docker_container_name']
+      - source_labels: ["__meta_docker_container_name"]
         target_label: container
     pipeline_stages:
       - docker: {}
 ```
 
 Notes:
+
 - This config tails `/var/log/*log` and the Docker container logs via the Docker socket. Adjust `__path__` or add file-based scraping as needed.
 
 ---
@@ -208,12 +210,12 @@ global:
 scrape_configs:
   - job_name: prometheus
     static_configs:
-      - targets: ['localhost:9090']
+      - targets: ["localhost:9090"]
 
   # Example: scrape node_exporter running on host
   - job_name: node_exporter
     static_configs:
-      - targets: ['node-exporter:9100']
+      - targets: ["node-exporter:9100"]
 
   # Add your application metrics endpoints here
 ```
@@ -285,9 +287,9 @@ Create `grafana/provisioning/dashboards/dashboards.yml`:
 ```yaml
 apiVersion: 1
 providers:
-  - name: 'default'
+  - name: "default"
     orgId: 1
-    folder: ''
+    folder: ""
     type: file
     options:
       path: /var/lib/grafana/dashboards
@@ -301,7 +303,7 @@ Place `grafana/dashboards/app-overview.json` — a simple JSON dashboard (exampl
 
 ```json
 {
-  "annotations": {"list": []},
+  "annotations": { "list": [] },
   "panels": [
     {
       "type": "graph",
@@ -373,6 +375,7 @@ DjangoInstrumentor().instrument()
 ```
 
 Notes:
+
 - OTLP default gRPC port is 4317. The example uses `endpoint="http://tempo:4317"` which works when services share Docker network and Tempo accepts OTLP. Adjust in production.
 
 ---
@@ -400,6 +403,5 @@ Notes:
 - Produce an opinionated `docker-compose.override.yml` that runs node_exporter and a tiny sample Django app container so you can see metrics/logs/traces end-to-end.
 - Generate a richer Grafana dashboard (JSON) for HTTP latency, error rate, and log-to-trace linking.
 - Add Docker healthchecks and resource limits for each service.
-
 
 ---
