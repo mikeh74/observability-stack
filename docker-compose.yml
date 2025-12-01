@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   grafana:
     image: grafana/grafana:11.0.0
@@ -39,6 +37,29 @@ services:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
 
+  fluentd:
+    build: ./fluentd
+    container_name: fluentd
+    volumes:
+      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
+      - fluentd_data:/var/log/fluentd
+    ports:
+      - "24224:24224"
+      - "24224:24224/udp"
+    depends_on:
+      - loki
+
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    container_name: fluent-bit
+    volumes:
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      # Mount your Apache logs here
+      - /var/log/apache2:/var/log/apache2:ro
+    depends_on:
+      - fluentd
+
   prometheus:
     image: prom/prometheus:v2.52.0
     container_name: prometheus
@@ -63,3 +84,4 @@ volumes:
   loki_data:
   grafana_data:
   prometheus_data:
+  fluentd_data:

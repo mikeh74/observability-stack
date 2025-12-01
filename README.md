@@ -1,407 +1,221 @@
-# Observability Bootstrap Pack — Grafana / Loki / Prometheus / Tempo (Docker Compose)
+# Observability Stack
 
-This repo contains a repeatable, version-controlled bootstrap for a self-hosted observability stack using Docker Compose. It provides logs (Loki + Promtail), metrics (Prometheus), traces (Tempo + OpenTelemetry), and Grafana for visualization. Everything is config-as-code and designed to be Git-friendly.
+A complete, production-ready observability stack using Docker Compose. This repository provides a unified solution for logs, metrics, and traces with Grafana as the central visualization platform.
 
----
+## 🎯 Intention
 
-## Repo layout
+This setup is designed to provide:
+
+- **Complete Observability**: The three pillars of observability (logs, metrics, traces) in a single stack
+- **Production-Ready**: Configuration-as-code approach with best practices baked in
+- **Easy Deployment**: One-command setup using Docker Compose
+- **Flexible Log Collection**: Multiple log shippers (Promtail, Fluentd, Fluent Bit) for different use cases
+- **Pre-configured Integration**: All components pre-wired and ready to receive data
+- **Developer-Friendly**: Quick local development setup with sensible defaults
+
+### Components
+
+| Component      | Purpose                                  | Port  |
+| -------------- | ---------------------------------------- | ----- |
+| **Grafana**    | Unified visualization and dashboards     | 3000  |
+| **Loki**       | Log aggregation and querying             | 3100  |
+| **Prometheus** | Metrics collection and storage           | 9090  |
+| **Tempo**      | Distributed tracing backend              | 3200  |
+| **Promtail**   | Docker container log collection          | -     |
+| **Fluentd**    | Flexible log routing and processing      | 24224 |
+| **Fluent Bit** | Lightweight log forwarding (Apache logs) | -     |
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Docker (20.10+)
+- Docker Compose (v2.0+)
+- Make (optional, for convenience commands)
+
+### Quick Start
+
+1. **Clone the repository**
+
+   ```bash
+   git clone <repository-url>
+   cd observability-stack
+   ```
+
+2. **Set environment variables** (optional)
+
+   Create a `.env` file for custom Grafana credentials:
+
+   ```bash
+   GF_SECURITY_ADMIN_USER=admin
+   GF_SECURITY_ADMIN_PASSWORD=your-secure-password
+   ```
+
+3. **Start the stack**
+
+   ```bash
+   make up
+   # or
+   docker compose up -d
+   ```
+
+4. **Verify services are running**
+
+   ```bash
+   make health
+   # or
+   docker compose ps
+   ```
+
+5. **Access Grafana**
+
+   Open http://localhost:3000 in your browser
+
+   - Default credentials: `admin/admin` (change on first login)
+   - Datasources are pre-configured for Loki, Prometheus, and Tempo
+   - Sample dashboards are available in the Dashboards menu
+
+### Available Commands
+
+Use `make help` to see all available commands:
+
+```bash
+make up              # Start all services
+make down            # Stop all services
+make restart         # Restart all services
+make logs            # Follow logs from all services
+make logs-grafana    # Follow Grafana logs only
+make health          # Check health status of all services
+make clean           # Stop and remove all containers and volumes
+make rebuild         # Rebuild and restart all services
+make validate        # Validate docker-compose.yml syntax
+```
+
+## 📁 Repository Structure
 
 ```
-observability-bootstrap/
-├── docker-compose.yml
-├── loki-config.yaml
-├── promtail-config.yml
-├── prometheus.yml
-├── grafana/
-│   ├── provisioning/
-│   │   ├── datasources/
-│   │   │   └── datasource.yml
-│   │   └── dashboards/
-│   │       └── dashboards.yml
-│   └── dashboards/
-│       └── app-overview.json
-├── tempo-config.yaml
-├── django-otel/
-│   ├── requirements.txt
-│   └── otel_instrumentation_example.py
-└── README.md
+observability-stack/
+├── docker-compose.yml              # Main orchestration file
+├── Makefile                        # Convenience commands
+├── prometheus.yml                  # Prometheus scrape configuration
+├── loki-config.yaml               # Loki server configuration
+├── promtail-config.yml            # Promtail log collection rules
+├── tempo-config.yaml              # Tempo tracing configuration
+├── fluent-bit/
+│   ├── fluent-bit.conf           # Fluent Bit configuration
+│   └── parsers.conf              # Log parsing rules
+├── fluentd/
+│   ├── Dockerfile                # Custom Fluentd image
+│   └── fluent.conf               # Fluentd routing configuration
+└── grafana/
+    ├── provisioning/
+    │   ├── datasources/
+    │   │   └── datasource.yml    # Auto-configured datasources
+    │   └── dashboards/
+    │       └── dashboards.yml    # Dashboard provisioning
+    └── dashboards/
+        └── app-overview.json     # Sample dashboard
+
 ```
 
----
+## 🔧 Configuration
 
-## How to use
+### Sending Logs to Loki
 
-1. Clone the repo.
-2. (Optional) Edit `promtail-config.yml` and `prometheus.yml` for targets you want to scrape.
-3. `docker compose up -d`
-4. Open Grafana at `http://localhost:3000` (default admin/admin — please change in production).
+**Via Promtail** (for Docker containers):
+Promtail automatically collects logs from all Docker containers. No additional configuration needed.
 
----
+**Via Fluentd** (for application logs):
+Configure your application to send logs to `localhost:24224`:
 
-## Files (copy these into files in your repo)
+```ruby
+<source>
+  @type forward
+  port 24224
+</source>
+```
 
-### `docker-compose.yml`
+**Direct HTTP API**:
+
+```bash
+curl -X POST http://localhost:3100/loki/api/v1/push \
+  -H "Content-Type: application/json" \
+  -d '{"streams":[{"stream":{"service":"test"},"values":[["'$(date +%s%N)'","test log message"]]}]}'
+```
+
+### Collecting Metrics with Prometheus
+
+Add scrape targets to `prometheus.yml`:
 
 ```yaml
-version: "3.9"
-
-services:
-  grafana:
-    image: grafana/grafana:11.0.0
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s
-    volumes:
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-      - loki
-      - tempo
-
-  loki:
-    image: grafana/loki:2.9.0
-    container_name: loki
-    command: -config.file=/etc/loki/local-config.yaml
-    volumes:
-      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
-      - loki_data:/loki
-    ports:
-      - "3100:3100"
-
-  promtail:
-    image: grafana/promtail:2.9.0
-    container_name: promtail
-    command: -config.file=/etc/promtail/config.yml
-    volumes:
-      - ./promtail-config.yml:/etc/promtail/config.yml:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock
-
-  prometheus:
-    image: prom/prometheus:v2.52.0
-    container_name: prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
-
-  tempo:
-    image: grafana/tempo:2.5.0
-    container_name: tempo
-    command: -config.file=/etc/tempo/tempo.yaml
-    volumes:
-      - ./tempo-config.yaml:/etc/tempo/tempo.yaml:ro
-    ports:
-      - "3200:3200"
-
-volumes:
-  loki_data:
-  grafana_data:
-  prometheus_data:
-```
-
----
-
-### `loki-config.yaml`
-
-```yaml
-auth_enabled: false
-server:
-  http_listen_port: 3100
-  http_grpc_port: 9095
-
-ingester:
-  wal:
-    enabled: true
-  lifecycler:
-    ring:
-      kvstore:
-        store: inmemory
-
-schema_config:
-  configs:
-    - from: 2020-10-24
-      store: boltdb-shipper
-      object_store: filesystem
-      schema: v11
-      index:
-        prefix: index_
-        period: 24h
-
-storage_config:
-  boltdb_shipper:
-    active_index_directory: /loki/index
-    cache_location: /loki/cache
-  filesystem:
-    directory: /loki/chunks
-
-limits_config:
-  ingestion_rate_mb: 10
-  ingestion_burst_size_mb: 20
-  max_streams_per_user: 0
-
-chunk_target_size: 1048576
-
-ruler:
-  ring:
-    kvstore:
-      store: inmemory
-```
-
----
-
-### `promtail-config.yml`
-
-```yaml
-server:
-  http_listen_port: 9080
-  grpc_listen_port: 0
-
-positions:
-  filename: /tmp/positions.yaml
-
-clients:
-  - url: http://loki:3100/loki/api/v1/push
-
 scrape_configs:
-  - job_name: system
+  - job_name: "my-app"
     static_configs:
-      - targets:
-          - localhost
-        labels:
-          job: varlogs
-          __path__: /var/log/*log
-
-  - job_name: docker-logs
-    docker_sd_configs:
-      - host: unix:///var/run/docker.sock
-    relabel_configs:
-      - source_labels:
-          ["__meta_docker_container_label_com_docker_swarm_service_name"]
-        target_label: service
-      - source_labels: ["__meta_docker_container_name"]
-        target_label: container
-    pipeline_stages:
-      - docker: {}
+      - targets: ["host.docker.internal:8080"]
 ```
 
-Notes:
+Then restart Prometheus:
 
-- This config tails `/var/log/*log` and the Docker container logs via the Docker socket. Adjust `__path__` or add file-based scraping as needed.
-
----
-
-### `prometheus.yml`
-
-```yaml
-global:
-  scrape_interval: 15s
-
-scrape_configs:
-  - job_name: prometheus
-    static_configs:
-      - targets: ["localhost:9090"]
-
-  # Example: scrape node_exporter running on host
-  - job_name: node_exporter
-    static_configs:
-      - targets: ["node-exporter:9100"]
-
-  # Add your application metrics endpoints here
+```bash
+make restart
 ```
 
----
+### Sending Traces to Tempo
 
-### `tempo-config.yaml`
-
-```yaml
-server:
-  http_listen_port: 3200
-
-distributor:
-  receivers:
-    otlp:
-      protocols:
-        grpc:
-        http:
-
-ingester:
-  trace_idle_after: 5m
-
-storage:
-  trace:
-    backend: local
-    local:
-      path: /tmp/tempo/traces
-
-grpc_server_max_recv_msg_size: 200
-```
-
-Notes: In production you should use object storage (S3/GCS) and configure retention.
-
----
-
-### Grafana provisioning
-
-Create `grafana/provisioning/datasources/datasource.yml`:
-
-```yaml
-apiVersion: 1
-deleteDatasources:
-  - name: Prometheus
-    orgId: 1
-
-datasources:
-  - name: Prometheus
-    type: prometheus
-    access: proxy
-    url: http://prometheus:9090
-    isDefault: true
-    editable: false
-
-  - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    editable: false
-
-  - name: Tempo
-    type: tempo
-    access: proxy
-    url: http://tempo:3200
-    editable: false
-```
-
-Create `grafana/provisioning/dashboards/dashboards.yml`:
-
-```yaml
-apiVersion: 1
-providers:
-  - name: "default"
-    orgId: 1
-    folder: ""
-    type: file
-    options:
-      path: /var/lib/grafana/dashboards
-```
-
-Place `grafana/dashboards/app-overview.json` — a simple JSON dashboard (example below).
-
----
-
-### `grafana/dashboards/app-overview.json` (simple example)
-
-```json
-{
-  "annotations": { "list": [] },
-  "panels": [
-    {
-      "type": "graph",
-      "title": "HTTP requests (example)",
-      "datasource": "Prometheus",
-      "targets": [
-        {
-          "expr": "sum(rate(http_requests_total[1m])) by (job)",
-          "legendFormat": "{{job}}"
-        }
-      ]
-    },
-    {
-      "type": "logs",
-      "title": "Recent logs",
-      "datasource": "Loki",
-      "targets": [
-        {
-          "expr": "{job=\"varlogs\"}",
-          "refId": "A"
-        }
-      ]
-    }
-  ],
-  "schemaVersion": 36,
-  "title": "App Overview"
-}
-```
-
-(Export a dashboard from Grafana after you connect datasources to produce richer JSON.)
-
----
-
-## Django OpenTelemetry example
-
-Create `django-otel/requirements.txt`:
+Configure your application to send traces to Tempo's OTLP endpoint:
 
 ```
-opentelemetry-api
-opentelemetry-sdk
-opentelemetry-exporter-otlp
-opentelemetry-instrumentation-django
-requests
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:3200
 ```
 
-Create `django-otel/otel_instrumentation_example.py`:
+## 📊 Using Grafana
 
-```python
-# Run this early in your Django startup (e.g., in manage.py before execute_from_command_line)
-from opentelemetry import trace
-from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.django import DjangoInstrumentor
+1. **Explore Logs**: Navigate to Explore → Select Loki datasource
+2. **Query Metrics**: Navigate to Explore → Select Prometheus datasource
+3. **View Traces**: Navigate to Explore → Select Tempo datasource
+4. **Create Dashboards**: Use the pre-configured datasources to build custom dashboards
 
-resource = Resource.create({
-    "service.name": "my-django-app"
-})
+## 🛠️ Troubleshooting
 
-provider = TracerProvider(resource=resource)
-processor = BatchSpanProcessor(OTLPSpanExporter(endpoint="http://tempo:4317", insecure=True))
-provider.add_span_processor(processor)
-trace.set_tracer_provider(provider)
+**Services not starting?**
 
-DjangoInstrumentor().instrument()
-
-# Now Django requests/DB calls are auto-instrumented and will be sent to Tempo
+```bash
+docker compose logs <service-name>
 ```
 
-Notes:
+**Can't access Grafana?**
 
-- OTLP default gRPC port is 4317. The example uses `endpoint="http://tempo:4317"` which works when services share Docker network and Tempo accepts OTLP. Adjust in production.
+- Ensure port 3000 is not in use: `lsof -i :3000`
+- Check Grafana logs: `make logs-grafana`
 
----
+**No logs appearing in Loki?**
 
-## Security & Production notes
+- Verify Promtail is running: `docker compose ps promtail`
+- Check Promtail logs: `docker compose logs promtail`
+- Ensure Docker socket is accessible
 
-- Change Grafana admin password and use proper secrets management (don’t keep secrets in Git if private).
-- Use object storage for Loki and Tempo in production (S3/GCS) and configure retention.
-- Set resource limits, monitoring, backups for Prometheus data and Loki indexes.
-- Consider running services as managed or behind systemd / container orchestrator for resiliency.
+**Prometheus not scraping targets?**
 
----
+- Check targets in Prometheus UI: http://localhost:9090/targets
+- Verify network connectivity from Prometheus container
+- Review `prometheus.yml` configuration
 
-## Helpful commands
+## 📝 Next Steps
 
-- Start: `docker compose up -d`
-- Stop: `docker compose down`
-- Rebuild (if you modify images): `docker compose up -d --build`
-- Tail logs: `docker compose logs -f grafana loki prometheus promtail tempo`
+- Customize `grafana/dashboards/` with your own dashboards
+- Configure alerting rules in Prometheus
+- Add more scrape targets for your applications
+- Set up retention policies in Loki and Prometheus
+- Configure authentication and security for production use
 
----
+## 🔒 Production Considerations
 
-## Next steps I can do for you
-
-- Produce an opinionated `docker-compose.override.yml` that runs node_exporter and a tiny sample Django app container so you can see metrics/logs/traces end-to-end.
-- Generate a richer Grafana dashboard (JSON) for HTTP latency, error rate, and log-to-trace linking.
-- Add Docker healthchecks and resource limits for each service.
+- Change default Grafana credentials
+- Enable authentication for all services
+- Configure proper retention policies
+- Set up backup strategies for persistent data
+- Use reverse proxy with SSL/TLS
+- Implement proper network segmentation
+- Configure resource limits in docker-compose.yml
 
 ---
