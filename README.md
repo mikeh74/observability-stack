@@ -15,15 +15,19 @@ This setup is designed to provide:
 
 ### Components
 
-| Component      | Purpose                                  | Port  |
-| -------------- | ---------------------------------------- | ----- |
-| **Grafana**    | Unified visualization and dashboards     | 3000  |
-| **Loki**       | Log aggregation and querying             | 3100  |
-| **Prometheus** | Metrics collection and storage           | 9090  |
-| **Tempo**      | Distributed tracing backend              | 3200  |
-| **Promtail**   | Docker container log collection          | -     |
-| **Fluentd**    | Flexible log routing and processing      | 24224 |
-| **Fluent Bit** | Lightweight log forwarding (Apache logs) | -     |
+| Component      | Purpose                                  | Port         |
+| -------------- | ---------------------------------------- | ------------ |
+| **Nginx**      | Reverse proxy with SSL/TLS termination   | 80, 443      |
+| **Grafana**    | Unified visualization and dashboards     | 3000*        |
+| **Loki**       | Log aggregation and querying             | 3100*        |
+| **Prometheus** | Metrics collection and storage           | 9090*        |
+| **Tempo**      | Distributed tracing backend              | 3200*        |
+| **Promtail**   | Docker container log collection          | -            |
+| **Fluentd**    | Flexible log routing and processing      | 24224        |
+| **Fluent Bit** | Lightweight log forwarding (Apache logs) | -            |
+| **Certbot**    | Let's Encrypt certificate management     | -            |
+
+*Ports are exposed internally and accessible via nginx reverse proxy on ports 80/443
 
 ## 🚀 Getting Started
 
@@ -44,14 +48,25 @@ This setup is designed to provide:
 
 2. **Set environment variables** (optional)
 
-   Create a `.env` file for custom Grafana credentials:
+   Create a `.env` file for custom configuration:
 
    ```bash
    GF_SECURITY_ADMIN_USER=admin
    GF_SECURITY_ADMIN_PASSWORD=your-secure-password
+   DOMAIN=localhost  # Change to your domain for production
    ```
 
-3. **Start the stack**
+3. **Generate SSL certificates**
+
+   For development with self-signed certificates:
+
+   ```bash
+   make generate-self-signed-certs
+   ```
+
+   For production with Let's Encrypt, see [SSL/TLS Setup](#ssl-tls-setup) section below.
+
+4. **Start the stack**
 
    ```bash
    make up
@@ -59,7 +74,7 @@ This setup is designed to provide:
    docker compose up -d
    ```
 
-4. **Verify services are running**
+5. **Verify services are running**
 
    ```bash
    make health
@@ -67,28 +82,33 @@ This setup is designed to provide:
    docker compose ps
    ```
 
-5. **Access Grafana**
+6. **Access services via nginx**
 
-   Open http://localhost:3000 in your browser
+   Open https://localhost in your browser (accept the self-signed certificate warning)
 
-   - Default credentials: `admin/admin` (change on first login)
-   - Datasources are pre-configured for Loki, Prometheus, and Tempo
-   - Sample dashboards are available in the Dashboards menu
+   - **Grafana**: https://localhost/grafana/
+   - **Prometheus**: https://localhost/prometheus/
+   - **Loki**: https://localhost/loki/
+   - **Tempo**: https://localhost/tempo/
+
+   Default Grafana credentials: `admin/admin` (change on first login)
 
 ### Available Commands
 
 Use `make help` to see all available commands:
 
 ```bash
-make up              # Start all services
-make down            # Stop all services
-make restart         # Restart all services
-make logs            # Follow logs from all services
-make logs-grafana    # Follow Grafana logs only
-make health          # Check health status of all services
-make clean           # Stop and remove all containers and volumes
-make rebuild         # Rebuild and restart all services
-make validate        # Validate docker-compose.yml syntax
+make up                          # Start all services
+make down                        # Stop all services
+make restart                     # Restart all services
+make logs                        # Follow logs from all services
+make logs-grafana                # Follow Grafana logs only
+make logs-nginx                  # Follow nginx logs only
+make health                      # Check health status of all services
+make clean                       # Stop and remove all containers and volumes
+make rebuild                     # Rebuild and restart all services
+make validate                    # Validate docker-compose.yml syntax
+make generate-self-signed-certs  # Generate self-signed SSL certificates
 ```
 
 ## 📁 Repository Structure
@@ -101,6 +121,14 @@ observability-stack/
 ├── loki-config.yaml               # Loki server configuration
 ├── promtail-config.yml            # Promtail log collection rules
 ├── tempo-config.yaml              # Tempo tracing configuration
+├── nginx/
+│   ├── nginx.conf                 # Main nginx configuration
+│   ├── ssl-params.conf            # SSL/TLS security settings
+│   ├── docker-entrypoint.sh       # Entrypoint script for config substitution
+│   ├── conf.d/
+│   │   └── default.conf.template  # Reverse proxy configuration template
+│   ├── ssl/                       # SSL certificates directory
+│   └── README.md                  # Nginx configuration documentation
 ├── fluent-bit/
 │   ├── fluent-bit.conf           # Fluent Bit configuration
 │   └── parsers.conf              # Log parsing rules
@@ -200,6 +228,92 @@ docker compose logs <service-name>
 - Verify network connectivity from Prometheus container
 - Review `prometheus.yml` configuration
 
+## 🔐 SSL/TLS Setup
+
+The observability stack includes nginx as a reverse proxy with SSL/TLS support. You have two options:
+
+### Option 1: Self-Signed Certificates (Development)
+
+For local development, generate self-signed certificates:
+
+```bash
+make generate-self-signed-certs
+```
+
+This creates:
+- `nginx/ssl/cert.pem` - SSL certificate
+- `nginx/ssl/key.pem` - Private key
+
+**Note**: Browsers will show a security warning for self-signed certificates. Click "Advanced" and proceed to accept the certificate for development purposes.
+
+### Option 2: Let's Encrypt (Production)
+
+For production deployments with a valid domain:
+
+1. **Configure your domain**
+
+   Update the `.env` file:
+   ```bash
+   DOMAIN=your-domain.com
+   ```
+
+2. **Ensure DNS is configured**
+
+   Point your domain's A record to your server's IP address.
+
+3. **Start the stack**
+
+   ```bash
+   make up
+   ```
+
+4. **Obtain Let's Encrypt certificate**
+
+   ```bash
+   docker compose run --rm certbot certonly --webroot \
+     --webroot-path=/var/www/certbot \
+     --email your-email@example.com \
+     --agree-tos \
+     --no-eff-email \
+     -d your-domain.com
+   ```
+
+5. **Update nginx configuration**
+
+   Edit `nginx/conf.d/default.conf.template` to use Let's Encrypt certificates:
+
+   ```nginx
+   ssl_certificate /etc/letsencrypt/live/your-domain.com/fullchain.pem;
+   ssl_certificate_key /etc/letsencrypt/live/your-domain.com/privkey.pem;
+   ```
+
+6. **Restart nginx**
+
+   ```bash
+   docker compose restart nginx
+   ```
+
+7. **Set up automatic renewal**
+
+   The certbot container automatically renews certificates. To ensure nginx reloads after renewal, add a cron job:
+
+   ```bash
+   # Renew certificates and reload nginx daily at 2am
+   0 2 * * * cd /path/to/observability-stack && docker compose restart certbot && docker compose exec nginx nginx -s reload
+   ```
+
+### Accessing Services with SSL/TLS
+
+Once SSL/TLS is configured:
+
+- All services are accessible via HTTPS on port 443
+- HTTP requests on port 80 are automatically redirected to HTTPS
+- Access services at:
+  - Grafana: `https://your-domain/grafana/`
+  - Prometheus: `https://your-domain/prometheus/`
+  - Loki: `https://your-domain/loki/`
+  - Tempo: `https://your-domain/tempo/`
+
 ## 📝 Next Steps
 
 - Customize `grafana/dashboards/` with your own dashboards
@@ -211,11 +325,14 @@ docker compose logs <service-name>
 ## 🔒 Production Considerations
 
 - Change default Grafana credentials
-- Enable authentication for all services
+- Enable authentication for all services (nginx basic auth or OAuth)
 - Configure proper retention policies
 - Set up backup strategies for persistent data
-- Use reverse proxy with SSL/TLS
+- Use Let's Encrypt certificates for SSL/TLS (see SSL/TLS Setup section)
 - Implement proper network segmentation
 - Configure resource limits in docker-compose.yml
+- Set up firewall rules to restrict access to ports 80/443 only
+- Enable nginx access logs monitoring
+- Configure fail2ban or similar for brute-force protection
 
 ---

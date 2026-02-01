@@ -1,14 +1,46 @@
 services:
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d/default.conf.template:/etc/nginx/conf.d/default.conf.template:ro
+      - ./nginx/ssl-params.conf:/etc/nginx/ssl-params.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - certbot_www:/var/www/certbot:ro
+    entrypoint: ["/docker-entrypoint.sh"]
+    depends_on:
+      - grafana
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    container_name: certbot
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
   grafana:
     image: grafana/grafana:11.0.0
     container_name: grafana
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     environment:
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
-      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s
+      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
@@ -25,8 +57,8 @@ services:
     volumes:
       - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
-    ports:
-      - "3100:3100"
+    expose:
+      - "3100"
 
   promtail:
     image: grafana/promtail:2.9.0
@@ -65,11 +97,13 @@ services:
     container_name: prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --web.external-url=/prometheus
+      - --web.route-prefix=/
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
-    ports:
-      - "9090:9090"
+    expose:
+      - "9090"
 
   tempo:
     image: grafana/tempo:2.5.0
@@ -77,11 +111,13 @@ services:
     command: -config.file=/etc/tempo/tempo.yaml
     volumes:
       - ./tempo-config.yaml:/etc/tempo/tempo.yaml:ro
-    ports:
-      - "3200:3200"
+    expose:
+      - "3200"
 
 volumes:
   loki_data:
   grafana_data:
   prometheus_data:
   fluentd_data:
+  certbot_conf:
+  certbot_www:

@@ -1,4 +1,4 @@
-.PHONY: help install up down restart logs clean pre-commit-install pre-commit-update pre-commit-run
+.PHONY: help install up down restart logs clean pre-commit-install pre-commit-update pre-commit-run generate-self-signed-certs
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -91,3 +91,20 @@ health: ## Check health status of all services
 	@curl -s -o /dev/null -w "  Status: %{http_code}\n" http://localhost:9090/-/healthy || echo "  Status: DOWN"
 	@echo "Tempo:      http://localhost:3200"
 	@curl -s -o /dev/null -w "  Status: %{http_code}\n" http://localhost:3200/ready || echo "  Status: DOWN"
+
+generate-self-signed-certs: ## Generate self-signed SSL certificates for development
+	@echo "Generating self-signed SSL certificates..."
+	@mkdir -p nginx/ssl
+	@openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+		-keyout nginx/ssl/key.pem \
+		-out nginx/ssl/cert.pem \
+		-subj "/C=US/ST=State/L=City/O=Organization/OU=Department/CN=localhost"
+	@echo "✓ Self-signed certificates generated in nginx/ssl/"
+	@echo "  - nginx/ssl/cert.pem"
+	@echo "  - nginx/ssl/key.pem"
+	@echo ""
+	@echo "Note: Browsers will show a security warning for self-signed certificates."
+	@echo "This is expected and safe for development."
+
+logs-nginx: ## Follow nginx logs
+	docker compose logs -f nginx

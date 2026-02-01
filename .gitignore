@@ -8,6 +8,11 @@ volumes/
 # Grafana data
 grafana_data/
 
+# SSL certificates
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+
 # OS files
 .DS_Store
 Thumbs.db
