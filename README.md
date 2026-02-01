@@ -295,11 +295,11 @@ For production deployments with a valid domain:
 
 7. **Set up automatic renewal**
 
-   The certbot container automatically renews certificates. To ensure nginx reloads after renewal, add a cron job:
+   The certbot container automatically renews certificates daily. To ensure nginx reloads after renewal, add a cron job:
 
    ```bash
-   # Renew certificates and reload nginx daily at 2am
-   0 2 * * * cd /path/to/observability-stack && docker compose restart certbot && docker compose exec nginx nginx -s reload
+   # Reload nginx configuration daily at 2am
+   0 2 * * * cd /path/to/observability-stack && docker compose exec nginx nginx -s reload
    ```
 
 ### Accessing Services with SSL/TLS
