@@ -36,10 +36,9 @@ services:
     expose:
       - "3000"
     environment:
-      - GF_INSTALL_PLUGINS=grafana-piechart-panel
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
-      - GF_SERVER_ROOT_URL=%(protocol)s://%(domain)s:%(http_port)s/grafana
+      - GF_SERVER_ROOT_URL=https://${DOMAIN:-localhost}/grafana
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
