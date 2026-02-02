@@ -66,7 +66,8 @@ Use the Makefile for common tasks:
 
 ### Docker Compose
 
-- Use specific version tags for images (not `latest` except for fluent-bit)
+- Use specific version tags for images to ensure reproducibility and stability
+- Exception: fluent-bit currently uses `latest` tag (consider pinning to specific version for production)
 - Define explicit container names for easier debugging
 - Use volumes for persistent data
 - Document port mappings clearly
