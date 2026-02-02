@@ -1,4 +1,4 @@
-.PHONY: help install up down restart logs clean pre-commit-install pre-commit-update pre-commit-run
+.PHONY: help install up down restart logs clean pre-commit-install pre-commit-update pre-commit-run generate-self-signed-certs
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -83,11 +83,30 @@ validate: ## Validate docker-compose.yml
 
 health: ## Check health status of all services
 	@echo "Checking service health..."
-	@echo "Grafana:    http://localhost:3000 (admin/admin)"
-	@curl -s -o /dev/null -w "  Status: %{http_code}\n" http://localhost:3000/api/health || echo "  Status: DOWN"
-	@echo "Loki:       http://localhost:3100"
-	@curl -s -o /dev/null -w "  Status: %{http_code}\n" http://localhost:3100/ready || echo "  Status: DOWN"
-	@echo "Prometheus: http://localhost:9090"
-	@curl -s -o /dev/null -w "  Status: %{http_code}\n" http://localhost:9090/-/healthy || echo "  Status: DOWN"
-	@echo "Tempo:      http://localhost:3200"
-	@curl -s -o /dev/null -w "  Status: %{http_code}\n" http://localhost:3200/ready || echo "  Status: DOWN"
+	@echo "Nginx:      https://localhost/health"
+	@curl -k -s -o /dev/null -w "  Status: %{http_code}\n" https://localhost/health || echo "  Status: DOWN"
+	@echo "Grafana:    https://localhost/grafana/ (admin/admin)"
+	@curl -k -s -o /dev/null -w "  Status: %{http_code}\n" https://localhost/grafana/api/health || echo "  Status: DOWN"
+	@echo "Loki:       https://localhost/loki/"
+	@curl -k -s -o /dev/null -w "  Status: %{http_code}\n" https://localhost/loki/ready || echo "  Status: DOWN"
+	@echo "Prometheus: https://localhost/prometheus/"
+	@curl -k -s -o /dev/null -w "  Status: %{http_code}\n" https://localhost/prometheus/-/healthy || echo "  Status: DOWN"
+	@echo "Tempo:      https://localhost/tempo/"
+	@curl -k -s -o /dev/null -w "  Status: %{http_code}\n" https://localhost/tempo/ready || echo "  Status: DOWN"
+
+generate-self-signed-certs: ## Generate self-signed SSL certificates for development
+	@echo "Generating self-signed SSL certificates..."
+	@mkdir -p nginx/ssl
+	@openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+		-keyout nginx/ssl/key.pem \
+		-out nginx/ssl/cert.pem \
+		-subj "/C=US/ST=State/L=City/O=Organization/OU=Department/CN=localhost"
+	@echo "✓ Self-signed certificates generated in nginx/ssl/"
+	@echo "  - nginx/ssl/cert.pem"
+	@echo "  - nginx/ssl/key.pem"
+	@echo ""
+	@echo "Note: Browsers will show a security warning for self-signed certificates."
+	@echo "This is expected and safe for development."
+
+logs-nginx: ## Follow nginx logs
+	docker compose logs -f nginx
